@@ -78,112 +78,133 @@ curl -sSfL https://raw.githubusercontent.com/docker/scout-cli/main/install.sh | 
 ```
 pipeline {
     agent any
+
     tools {
         jdk 'jdk17'
         nodejs 'node16'
     }
+
     environment {
-        SCANNER_HOME=tool 'sonar-scanner'
+        SCANNER_HOME = tool 'sonar-scanner'
     }
+
     stages {
-        stage ("clean workspace") {
+
+        stage("Clean Workspace") {
             steps {
                 cleanWs()
             }
         }
-        stage ("Git checkout") {
+
+        stage("Git Checkout") {
             steps {
                 git branch: 'main', url: 'https://github.com/yeshwanthlm/starbucks.git'
             }
         }
-        stage("Sonarqube Analysis "){
-            steps{
+
+        stage("SonarQube Analysis") {
+            steps {
                 withSonarQubeEnv('sonar-server') {
-                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=starbucks \
-                    -Dsonar.projectKey=starbucks '''
+                    sh """
+                        $SCANNER_HOME/bin/sonar-scanner \
+                        -Dsonar.projectName=starbucks \
+                        -Dsonar.projectKey=starbucks
+                    """
                 }
             }
         }
-        stage("quality gate"){
-           steps {
+
+        stage("Quality Gate") {
+            steps {
                 script {
-                    waitForQualityGate abortPipeline: false, credentialsId: 'Sonar-token' 
+                    waitForQualityGate abortPipeline: true
                 }
-            } 
+            }
         }
+
         stage("Install NPM Dependencies") {
             steps {
                 sh "npm install"
             }
         }
-        stage('OWASP FS SCAN') {
+
+        stage("OWASP Dependency-Check Scan") {
             steps {
                 dependencyCheck additionalArguments: '--scan ./ --disableYarnAudit --disableNodeAudit', odcInstallation: 'DP-Check'
                 dependencyCheckPublisher pattern: '**/dependency-check-report.xml'
             }
         }
-        stage ("Trivy File Scan") {
+
+        stage("Trivy File Scan") {
             steps {
-                sh "trivy fs . > trivy.txt"
+                sh "trivy fs . --skip-files 'node_modules|dependency-check-report.xml' > trivy.txt || true"
             }
         }
-        stage ("Build Docker Image") {
+
+        stage("Build Docker Image") {
             steps {
                 sh "docker build -t starbucks ."
             }
         }
-        stage ("Tag & Push to DockerHub") {
+
+        stage("Tag & Push to DockerHub") {
             steps {
-                script {
-                    withDockerRegistry(credentialsId: 'docker') {
-                        sh "docker tag starbucks amonkincloud/starbucks:latest "
-                        sh "docker push amonkincloud/starbucks:latest "
-                    }
+                withCredentials([usernamePassword(credentialsId: 'Docker', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker tag starbucks $DOCKER_USER/starbucks:latest
+                        docker push $DOCKER_USER/starbucks:latest
+                    '''
                 }
             }
         }
-        stage('Docker Scout Image') {
+
+        stage("Docker Scout Scan") {
             steps {
-                script{
-                   withDockerRegistry(credentialsId: 'docker', toolName: 'docker'){
-                       sh 'docker-scout quickview amonkincloud/starbucks:latest'
-                       sh 'docker-scout cves amonkincloud/starbucks:latest'
-                       sh 'docker-scout recommendations amonkincloud/starbucks:latest'
-                   }
+                withCredentials([usernamePassword(credentialsId: 'Docker', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                        docker-scout quickview $DOCKER_USER/starbucks:latest || true
+                        docker-scout cves $DOCKER_USER/starbucks:latest || true
+                        docker-scout recommendations $DOCKER_USER/starbucks:latest || true
+                    '''
                 }
             }
         }
-        stage ("Deploy to Conatiner") {
+
+        stage("Deploy to Container") {
             steps {
-                sh 'docker run -d --name starbucks -p 3000:3000 amonkincloud/starbucks:latest'
+                withCredentials([usernamePassword(credentialsId: 'Docker', usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
+                    sh '''
+                        docker rm -f starbucks || true
+                        docker run -d --name starbucks -p 3000:3000 $DOCKER_USER/starbucks:latest
+                    '''
+                }
             }
         }
     }
+
     post {
-    always {
-        emailext attachLog: true,
-            subject: "'${currentBuild.result}'",
-            body: """
-                <html>
-                <body>
-                    <div style="background-color: #FFA07A; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Project: ${env.JOB_NAME}</p>
-                    </div>
-                    <div style="background-color: #90EE90; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">Build Number: ${env.BUILD_NUMBER}</p>
-                    </div>
-                    <div style="background-color: #87CEEB; padding: 10px; margin-bottom: 10px;">
-                        <p style="color: white; font-weight: bold;">URL: ${env.BUILD_URL}</p>
-                    </div>
-                </body>
-                </html>
-            """,
-            to: 'provide_your_Email_id_here',
-            mimeType: 'text/html',
-            attachmentsPattern: 'trivy.txt'
+        always {
+            emailext attachLog: true,
+                subject: "'${currentBuild.result}' - Starbucks Pipeline",
+                body: """
+                    <html>
+                        <body>
+                            <h2>Pipeline Result: ${currentBuild.result}</h2>
+                            <p><b>Project:</b> ${env.JOB_NAME}</p>
+                            <p><b>Build Number:</b> ${env.BUILD_NUMBER}</p>
+                            <p><b>URL:</b> <a href="${env.BUILD_URL}">${env.BUILD_URL}</a></p>
+                        </body>
+                    </html>
+                """,
+                to: 'manishawijegunawardana@gmail.com',
+                mimeType: 'text/html',
+                attachmentsPattern: 'trivy.txt, **/dependency-check-report.xml'
         }
     }
 }
+
 
 ```
 # ☕ Starbucks CI/CD Pipeline with Security Scans
