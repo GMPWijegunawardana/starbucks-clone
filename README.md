@@ -184,5 +184,32 @@ pipeline {
         }
     }
 }
+# ☕ Starbucks CI/CD Pipeline with Security Scans
+
+This project demonstrates a full CI/CD pipeline using **Jenkins, Docker, Trivy, and OWASP Dependency-Check**.
+
+## 🔹 Pipeline Overview
+- Jenkins pipeline (Groovy-based)
+- SonarQube analysis
+- OWASP Dependency-Check scan
+- Trivy image scanning
+- Docker image build & push to DockerHub
+- Deployment on container
+
+## 🔹 Reports
+- [Trivy Vulnerability Report (TXT)](reports/trivy-report.txt)
+- [Trivy Vulnerability Report (JSON)](reports/trivy-report.json)
+- [OWASP Dependency-Check Report (HTML)](reports/dependency-check-report.html)
+
+## 🔹 Pipeline Screenshot
+![Jenkins Pipeline](screenshots/jenkins-pipeline.png)
+
+## 🔹 Security Report Screenshot
+![Trivy Report](screenshots/trivy.png)
+![Dependency-Check Report](screenshots/depcheck.png)
+
+---
+✅ DockerHub: [manishapasandul/starbucks](https://hub.docker.com/r/manishapasandul/starbucks)  
+✅ GitHub Repo: (add your repo link here)
 
 ```
