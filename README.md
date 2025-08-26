@@ -184,6 +184,8 @@ pipeline {
         }
     }
 }
+
+```
 # ☕ Starbucks CI/CD Pipeline with Security Scans
 
 This project demonstrates a full CI/CD pipeline using **Jenkins, Docker, Trivy, and OWASP Dependency-Check**.
@@ -211,5 +213,3 @@ This project demonstrates a full CI/CD pipeline using **Jenkins, Docker, Trivy, 
 ---
 ✅ DockerHub: [manishapasandul/starbucks](https://hub.docker.com/r/manishapasandul/starbucks)  
 ✅ GitHub Repo: (add your repo link here)
-
-```
